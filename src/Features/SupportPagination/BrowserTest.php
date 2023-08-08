@@ -2,16 +2,54 @@
 
 namespace Livewire\Features\SupportPagination;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Blade;
-use Livewire\Component;
-use Livewire\Livewire;
-use Livewire\WithPagination;
 use Sushi\Sushi;
+use Livewire\Livewire;
+use Livewire\Component;
 use Tests\BrowserTestCase;
+use Livewire\WithPagination;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Database\Eloquent\Model;
+
+class FirstPage extends Component
+{
+    use WithPagination;
+
+    public function render()
+    {
+        return Blade::render(
+            <<< 'HTML'
+            <div>Dupa</div>
+            <div>
+                @foreach ($posts as $post)
+                    <h1 wire:key="post-{{ $post->id }}">{{ $post->title }}</h1>
+                @endforeach
+
+                {{ $posts->links() }}
+            </div>
+            HTML,
+            [
+                'posts' => Post::paginate(3),
+            ]
+        );
+    }
+}
 
 class BrowserTest extends BrowserTestCase
 {
+    public function test_pagination_do_not_error_when_navigate_through_wire_navigate_before()
+    {
+        Livewire::component('first-page', FirstPage::class);
+
+        Route::get('/first', FirstPage::class)->middleware('web');
+
+        $this->browse(function ($browser) {
+            $browser
+                ->visit('/first')
+                ->assertSee('Dupa');
+        });
+    }
+
     public function test_tailwind()
     {
         Livewire::visit(new class extends Component {
