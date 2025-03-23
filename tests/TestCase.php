@@ -86,7 +86,8 @@ class TestCase extends \Orchestra\Testbench\Dusk\TestCase
         $options = (new ChromeOptions)->addArguments(collect([
             '--window-size=1920,1080',
             '--disable-search-engine-choice-screen',
-            '--disable-smooth-scrolling'
+            '--disable-smooth-scrolling',
+            '--disable-dev-shm-usage'
         ])->unless($this->hasHeadlessDisabled(), function (Collection $items) {
             return $items->merge([
                 '--disable-gpu',
