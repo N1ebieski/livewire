@@ -2,24 +2,25 @@
 
 namespace LegacyTests\Browser;
 
-use Throwable;
-use Sushi\Sushi;
-use Psy\Shell;
-use Orchestra\Testbench\Dusk\TestCase as BaseTestCase;
-use Orchestra\Testbench\Dusk\Options as DuskOptions;
-use Livewire\LivewireServiceProvider;
-use Laravel\Dusk\Browser;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Foundation\Auth\User as AuthUser;
-use Illuminate\Database\Eloquent\Model;
-use Facebook\WebDriver\Remote\RemoteWebDriver;
-use Facebook\WebDriver\Remote\DesiredCapabilities;
-use Facebook\WebDriver\Chrome\ChromeOptions;
-use Exception;
 use Closure;
+use Exception;
+use Facebook\WebDriver\Chrome\ChromeOptions;
+use Facebook\WebDriver\Remote\DesiredCapabilities;
+use Facebook\WebDriver\Remote\RemoteWebDriver;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as AuthUser;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Route;
+use Laravel\Dusk\Browser;
 use Livewire\Features\SupportTesting\ShowDuskComponent;
+use Livewire\LivewireServiceProvider;
+use Orchestra\Testbench\Dusk\Options as DuskOptions;
+use Orchestra\Testbench\Dusk\TestCase as BaseTestCase;
+use Psy\Shell;
+use Sushi\Sushi;
+use Throwable;
 
 class TestCase extends BaseTestCase
 {
@@ -226,7 +227,18 @@ class TestCase extends BaseTestCase
 
     protected function driver(): RemoteWebDriver
     {
-        $options = DuskOptions::getChromeOptions();
+        // $options = DuskOptions::getChromeOptions();
+
+        $options = (new ChromeOptions)->addArguments(collect([
+            '--window-size=1920,1080',
+            '--disable-search-engine-choice-screen',
+            '--disable-smooth-scrolling'
+        ])->unless($this->hasHeadlessDisabled(), function (Collection $items) {
+            return $items->merge([
+                '--disable-gpu',
+                '--headless=new',
+            ]);
+        })->all());
 
         $options->setExperimentalOption('prefs', [
             'download.default_directory' => __DIR__.'/downloads',
@@ -241,7 +253,8 @@ class TestCase extends BaseTestCase
                 'http://localhost:9515', DesiredCapabilities::safari()
             )
             : RemoteWebDriver::create(
-                'http://localhost:9515',
+                // 'http://localhost:9515',
+                'http://selenium:4444/wd/hub',
                 DesiredCapabilities::chrome()->setCapability(
                     ChromeOptions::CAPABILITY,
                     $options
