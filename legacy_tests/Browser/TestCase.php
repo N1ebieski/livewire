@@ -10,6 +10,7 @@ use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as AuthUser;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
@@ -250,11 +251,11 @@ class TestCase extends BaseTestCase
 
         return static::$useSafari
             ? RemoteWebDriver::create(
-                'http://localhost:9515', DesiredCapabilities::safari()
+                Env::get('DUSK_DRIVER_URL') ?? 'http://localhost:9515', 
+                DesiredCapabilities::safari()
             )
             : RemoteWebDriver::create(
-                // 'http://localhost:9515',
-                'http://selenium:4444/wd/hub',
+                Env::get('DUSK_DRIVER_URL') ?? 'http://localhost:9515',
                 DesiredCapabilities::chrome()->setCapability(
                     ChromeOptions::CAPABILITY,
                     $options
