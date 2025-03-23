@@ -2,8 +2,14 @@
 
 namespace Tests;
 
-use Illuminate\Support\Facades\File;
+use Facebook\WebDriver\Chrome\ChromeOptions;
+use Facebook\WebDriver\Remote\DesiredCapabilities;
+use Facebook\WebDriver\Remote\RemoteWebDriver;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
+use Override;
 
 class TestCase extends \Orchestra\Testbench\Dusk\TestCase
 {
@@ -73,4 +79,27 @@ class TestCase extends \Orchestra\Testbench\Dusk\TestCase
     {
         return base_path('tests/Feature/Livewire'.($path ? '/'.$path : ''));
     }
+
+    #[Override]
+    protected function driver(): RemoteWebDriver
+    {
+        $options = (new ChromeOptions)->addArguments(collect([
+            '--window-size=1920,1080',
+            '--disable-search-engine-choice-screen',
+            '--disable-smooth-scrolling'
+        ])->unless($this->hasHeadlessDisabled(), function (Collection $items) {
+            return $items->merge([
+                '--disable-gpu',
+                '--headless=new',
+            ]);
+        })->all());
+
+        return RemoteWebDriver::create(
+            Env::get('DUSK_DRIVER_URL') ?? \sprintf('http://localhost:%d', static::$chromeDriverPort),
+            DesiredCapabilities::chrome()->setCapability(
+                ChromeOptions::CAPABILITY,
+                $options
+            )
+        );
+    }    
 }

@@ -23,6 +23,7 @@
         <env name="CACHE_STORE" value="file"/>
         <env name="SESSION_DRIVER" value="file"/>
         <env name="DUSK_SERVE_URL" value="http://livewire.test"/>
+        <env name="DUSK_DRIVER_URL" value="http://selenium:4444/wd/hub"/>
         <env name="DUSK_SERVE_HOST" value="0.0.0.0"/>
     </php>
 </phpunit>
