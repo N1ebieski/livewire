@@ -7324,6 +7324,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         return;
       if (!alpine.snapshotIdx)
         return;
+      if (!state.previousUrl)
+        return;
       if (snapshotCache.has(alpine.snapshotIdx)) {
         let snapshot = snapshotCache.retrieve(alpine.snapshotIdx);
         handleHtml(snapshot.html, snapshot.url, snapshotCache.currentUrl, snapshotCache.currentKey);
@@ -7343,8 +7345,14 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   }
   function updateUrl(method, url, html) {
     let key = url.toString() + "-" + Math.random();
-    method === "pushState" ? snapshotCache.push(key, new Snapshot(url, html)) : snapshotCache.replace(key = snapshotCache.currentKey ?? key, new Snapshot(url, html));
+    if (method === "pushState") {
+      snapshotCache.push(key, new Snapshot(url, html));
+    } else {
+      key = snapshotCache.currentKey?.startsWith(window.location.href + "-") ? snapshotCache.currentKey : key;
+      snapshotCache.replace(key, new Snapshot(url, html));
+    }
     let state = history.state || {};
+    state.previousUrl = window.location.href;
     if (!state.alpine)
       state.alpine = {};
     state.alpine.snapshotIdx = key;
