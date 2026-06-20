@@ -1,6 +1,6 @@
 import { dataSet, deepClone, diff, extractData} from '@/utils'
 import { generateWireObject } from '@/$wire'
-import { closestComponent, findComponent } from '@/store'
+import { closestComponent, findComponent, hasComponent } from '@/store'
 import { trigger } from '@/hooks'
 
 export class Component {
@@ -143,11 +143,21 @@ export class Component {
         let meta = this.snapshot.memo
         let childIds = Object.values(meta.children).map(i => i[1])
 
-        return childIds.map(id => findComponent(id))
+        return childIds
+            .filter(id => hasComponent(id))
+            .map(id => findComponent(id))
     }
 
     get parent() {
         return closestComponent(this.el.parentElement)
+    }
+
+    get isLazy() {
+        return this.snapshot.memo.lazyLoaded !== undefined
+    }
+
+    get hasBeenLazyLoaded() {
+        return this.snapshot.memo.lazyLoaded === true
     }
 
     inscribeSnapshotAndEffectsOnElement() {

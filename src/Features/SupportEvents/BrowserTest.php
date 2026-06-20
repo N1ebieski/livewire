@@ -60,6 +60,38 @@ class BrowserTest extends BrowserTestCase
             ->assertSeeIn('@button', '1');
     }
 
+    public function test_event_handler_with_single_parameter()
+    {
+        Livewire::visit(new class extends Component {
+            public $button = 'Text';
+
+            protected $listeners = ['foo' => 'onFoo'];
+
+            function onFoo($param) {
+                $this->button = $param;
+            }
+
+            function bar() {
+                $this->dispatch('foo', 'Bar set text');
+            }
+
+            function render()
+            {
+                return Blade::render(<<<'HTML'
+                <div>
+                    <button @click="Livewire.dispatch('foo', 'Param Set Text')" dusk="button">{{ $button }}</button>
+                    <button wire:click="bar" dusk="bar-button">Bar</button>
+                </div>
+                HTML, ['button' => $this->button]);
+            }
+        })
+            ->assertSeeIn('@button', 'Text')
+            ->waitForLivewire()->click('@button')
+            ->assertSeeIn('@button', 'Param Set Text')
+            ->waitForLivewire()->click('@bar-button')
+            ->assertSeeIn('@button', 'Bar set text');
+    }
+
     public function test_can_dispatch_self_inside_script_directive()
     {
         Livewire::visit(new class extends Component {
@@ -228,5 +260,132 @@ class BrowserTest extends BrowserTestCase
             ->assertSeeIn('@text', '[object Object],[object Object],[object Object]')
             ->assertScript('document.getElementById(\'root\').querySelectorAll(\'div\').length', 3)
             ->assertConsoleLogMissingWarning('item is not defined');
+    }
+
+    public function test_nested_components_with_listeners_are_cleaned_up_before_events_are_dispatched()
+    {
+        Livewire::visit([
+            new class () extends Component {
+                public $test = 1;
+
+                public function change()
+                {
+                    $this->test = $this->test + 1;
+
+                    $this->dispatch("whatever");
+                }
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <button wire:click="change" dusk="change">change</button>
+
+                        <livewire:child1 :data="$test" :key="$test"/>
+                    </div>
+                    HTML;
+                }
+            },
+            'child1' => new class () extends Component {
+                public $data;
+
+                #[On('whatever')]
+                public function triggeredEvent() {
+                    //
+                }
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <p>Child : {{ $data }} <br/>ID: {{ $this->__id }}</p>
+
+                        <livewire:child2 :data="$data" :key="$data"/>
+                    </div>
+                    HTML;
+                }
+            },
+            'child2' => new class () extends Component {
+                public $data;
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <p>
+                        Child 2: {{ $data }}<br/>ID :{{ $this->__id }}
+                    </p>
+                    HTML;
+                }
+            },
+        ])
+            ->waitForLivewireToLoad()
+            ->waitForLivewire()->click('@change')
+            ->assertConsoleLogHasNoErrors();
+    }
+
+    public function test_dispatched_event_does_not_throw_when_wire_key_changes_during_morph()
+    {
+        // Regression: when a Livewire dispatch triggers an Alpine event chain
+        // that accesses $wire on an element whose wire:key changed during morph,
+        // $wire throws "Could not find Livewire component in DOM tree" because
+        // morph replaced the element before the event chain completes.
+        Livewire::visit([
+            new class () extends Component {
+                public ?string $action = 'delete';
+
+                public function confirm(): void
+                {
+                    $this->action = null;
+
+                    $this->dispatch('action-confirmed');
+                }
+
+                public function cleanup(): void
+                {
+                    //
+                }
+
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <div
+                            x-data="{
+                                open: true,
+                                close() {
+                                    this.open = false
+                                    this.$refs.container.dispatchEvent(
+                                        new CustomEvent('closed')
+                                    )
+                                },
+                            }"
+                            x-on:action-confirmed.window="close()"
+                        >
+                            <div x-show="open">
+                                <div
+                                    x-ref="container"
+                                    x-on:closed.stop="$wire.cleanup()"
+                                    @if($action)
+                                        wire:key="action.{{ $action }}"
+                                    @endif
+                                >
+                                    <button dusk="confirm" wire:click="confirm">Confirm</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Extra x-data with x-show is required to trigger Alpine scheduling that exposes the race --}}
+                        <div x-data="{ show: false }" x-cloak>
+                            <div x-show="show"></div>
+                        </div>
+                    </div>
+                    HTML;
+                }
+            },
+        ])
+            ->waitForLivewireToLoad()
+            ->waitForLivewire()->click('@confirm')
+            ->pause(500)
+            ->assertConsoleLogHasNoErrors();
     }
 }

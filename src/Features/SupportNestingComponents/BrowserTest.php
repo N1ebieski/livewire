@@ -360,6 +360,72 @@ class BrowserTest extends \Tests\BrowserTestCase
             ->waitForLivewire()->click('@dispatch-foo-event-btn')
             ->assertSee('foo');
     }
+
+    public function test_a_child_component_can_be_removed_by_javascript_and_it_does_not_throw_an_error_on_the_next_render()
+    {
+        Livewire::visit([
+            new class extends Component
+            {
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div>
+                        <button type="button" wire:click="$refresh" dusk="refresh-parent">Refresh</button>
+                        <livewire:child />
+                    </div>
+                    HTML;
+                }
+            },
+            'child' => new class extends Component
+            {
+                public function render()
+                {
+                    return <<<'HTML'
+                    <div dusk="child">
+                        Child
+                        <button type="button" x-on:click="$el.parentElement.remove()" dusk="remove-child">Remove using javascript</button>
+                    </div>
+                    HTML;
+                }
+            }
+        ])
+        ->click('@remove-child')
+        ->assertNotPresent('@child')
+        ->waitForLivewire()->click('@refresh-parent')
+        ->assertConsoleLogHasNoErrors();
+    }
+
+    public function test_concatenated_child_key_does_not_overwrite_foreach_variable()
+    {
+        Livewire::visit([
+            new class extends Component {
+                public $items = ['foo', 'bar'];
+
+                public function render()
+                {
+                    return <<<'BLADE'
+                    <div>
+                        @foreach ($items as $key => $item)
+                            <div wire:key="item-{{ $key }}">
+                                <livewire:child :key="$key . '-child'" />
+                                <span dusk="key-{{ $key }}">{{ $key }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                    BLADE;
+                }
+            },
+            'child' => new class extends Component {
+                public function render()
+                {
+                    return '<div>child</div>';
+                }
+            },
+        ])
+            ->assertSeeIn('[dusk="key-0"]', '0')
+            ->assertSeeIn('[dusk="key-1"]', '1')
+        ;
+    }
 }
 
 class Page extends Component

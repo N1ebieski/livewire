@@ -1,5 +1,6 @@
 import { diff } from '@/utils'
 import { on, trigger } from '@/hooks'
+import Alpine from 'alpinejs'
 
 /**
  * A commit represents an individual component updating itself server-side...
@@ -32,6 +33,25 @@ export class Commit {
         trigger('commit.prepare', { component: this.component })
     }
 
+    // The reason we are merging children into the encoded snapshot instead of the normal
+    // snapshot is because we don't want to deal with the type issues that happen when
+    // we deserialise and serialise the snapshot into JSON. So instead we merge the
+    // children into the encoded snapshot manually by doing a string replace...
+    getEncodedSnapshotWithLatestChildrenMergedIn() {
+        let { snapshotEncoded, children, snapshot } = this.component
+        let childIds = children.map(child => child.id)
+
+        let filteredChildren = Object.fromEntries(
+            Object.entries(snapshot.memo.children)
+                .filter(([key, value]) => childIds.includes(value[1]))
+        )
+
+        return snapshotEncoded.replace(
+            /"children":\{[^}]*\}/,
+            `"children":${JSON.stringify(filteredChildren)}`
+        )
+    }
+
     // Generate a JSON-friendly server-request payload...
     toRequestPayload() {
         // Generate a "diff" of the current last known server-side state, and
@@ -40,8 +60,12 @@ export class Commit {
 
         let updates = this.component.mergeQueuedUpdates(propertiesDiff)
 
+        // Merge the component's current children into the encoded snapshot. That
+        // way if any have been removed, they do not get sent to the server...
+        let snapshotEncoded = this.getEncodedSnapshotWithLatestChildrenMergedIn()
+
         let payload = {
-            snapshot: this.component.snapshotEncoded,
+            snapshot: snapshotEncoded,
             updates: updates,
             calls: this.calls.map(i => ({
                 path: i.path,
@@ -82,11 +106,18 @@ export class Commit {
 
             respond()
 
-            // Take the new snapshot and merge it into the existing one...
-            this.component.mergeNewSnapshot(snapshot, effects, updates)
+            // Wrap in Alpine.transaction() to defer reactive effects until
+            // after the morph completes. Without this, Alpine plugins like
+            // x-mask can fire synthetic input events during the reactive
+            // update, which trigger x-model setters that recreate deleted
+            // array entries via dataSet() before the morph removes them...
+            Alpine.transaction(() => {
+                // Take the new snapshot and merge it into the existing one...
+                this.component.mergeNewSnapshot(snapshot, effects, updates)
 
-            // Trigger any side effects from the payload like "morph" and "dispatch event"...
-            this.component.processEffects(this.component.effects)
+                // Trigger any side effects from the payload like "morph" and "dispatch event"...
+                this.component.processEffects(this.component.effects)
+            })
 
             if (effects['returns']) {
                 let returns = effects['returns']

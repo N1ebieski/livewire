@@ -16,7 +16,9 @@ let autofocus = false
 
 export default function (Alpine) {
 
-    Alpine.navigate = (url) => {
+    Alpine.navigate = (url, options = {}) => {
+        let { preserveScroll = false } = options
+
         let destination = createUrlObjectFromString(url)
 
         let prevented = fireEventForOtherLibrariesToHookInto('alpine:navigate', {
@@ -25,7 +27,7 @@ export default function (Alpine) {
 
         if (prevented) return
 
-        navigateTo(destination)
+        navigateTo(destination, { preserveScroll })
     }
 
     Alpine.navigate.disableProgressBar = () => {
@@ -36,6 +38,8 @@ export default function (Alpine) {
 
     Alpine.directive('navigate', (el, { modifiers }) => {
         let shouldPrefetchOnHover = modifiers.includes('hover')
+
+        let preserveScroll = modifiers.includes('preserve-scroll')
 
         shouldPrefetchOnHover && whenThisLinkIsHoveredFor(el, 60, () => {
             let destination = extractDestinationFromLink(el)
@@ -63,20 +67,23 @@ export default function (Alpine) {
 
                 if (prevented) return
 
-                navigateTo(destination);
+                navigateTo(destination, { preserveScroll })
             })
         })
     })
 
-    function navigateTo(destination, shouldPushToHistoryState = true) {
+    function navigateTo(destination, { preserveScroll = false, shouldPushToHistoryState = true }) {
         showProgressBar && showAndStartProgressBar()
 
         fetchHtmlOrUsePrefetchedHtml(destination, (html, finalDestination) => {
-            fireEventForOtherLibrariesToHookInto('alpine:navigating')
+            // Fire the navigating event, allowing listeners to register onSwap callbacks
+            let swapCallbacks = []
+
+            fireEventForOtherLibrariesToHookInto('alpine:navigating', {
+                onSwap: (callback) => swapCallbacks.push(callback)
+            })
 
             restoreScroll && storeScrollInformationInHtmlBeforeNavigatingAway()
-
-            showProgressBar && finishAndHideProgressBar()
 
             cleanupAlpineElementsOnThePageThatArentInsideAPersistedElement()
 
@@ -102,7 +109,10 @@ export default function (Alpine) {
                         unPackPersistedPopovers(persistedEl)
                     })
 
-                    restoreScrollPositionOrScrollToTop()
+                    !preserveScroll && restoreScrollPositionOrScrollToTop()
+
+                    // Invoke any callbacks registered via onSwap during the navigating event
+                    swapCallbacks.forEach(callback => callback())
 
                     afterNewScriptsAreDoneLoading(() => {
                         andAfterAllThis(() => {
@@ -113,6 +123,7 @@ export default function (Alpine) {
                             nowInitializeAlpineOnTheNewPage(Alpine)
 
                             fireEventForOtherLibrariesToHookInto('alpine:navigated')
+                            showProgressBar && finishAndHideProgressBar()
                         })
                     })
                 })
@@ -131,9 +142,7 @@ export default function (Alpine) {
 
                 if (prevented) return
 
-                let shouldPushToHistoryState = false
-
-                navigateTo(destination, shouldPushToHistoryState)
+                navigateTo(destination, { shouldPushToHistoryState: false })
             })
         },
         (html, url, currentPageUrl, currentPageKey) => {
@@ -149,11 +158,16 @@ export default function (Alpine) {
             // the back button is hit, and not AFTER:
             storeScrollInformationInHtmlBeforeNavigatingAway()
 
-            // This ensures the current HTML has the latest snapshot
-            fireEventForOtherLibrariesToHookInto('alpine:navigating')
+            // Fire the navigating event, allowing listeners to register onSwap callbacks
+            let swapCallbacks = []
 
-            // Only update the snapshot and not the history state as the history state
-            // has already changed to the new page due to the popstate event
+            fireEventForOtherLibrariesToHookInto('alpine:navigating', {
+                onSwap: (callback) => swapCallbacks.push(callback)
+            })
+
+            // Update the snapshot (not the history state, as the history state has
+            // already changed to the new page due to the popstate event).
+            // This ensures the current HTML has the latest snapshot.
             updateCurrentPageHtmlInSnapshotCacheForLaterBackButtonClicks(currentPageUrl, currentPageKey)
 
             preventAlpineFromPickingUpDomChanges(Alpine, andAfterAllThis => {
@@ -173,6 +187,9 @@ export default function (Alpine) {
                     })
 
                     restoreScrollPositionOrScrollToTop()
+
+                    // Invoke any callbacks registered via onSwap during the navigating event
+                    swapCallbacks.forEach(callback => callback())
 
                     andAfterAllThis(() => {
                         autofocus && autofocusElementsWithTheAutofocusAttribute()

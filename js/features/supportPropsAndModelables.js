@@ -43,6 +43,10 @@ function colocateCommitsByComponent(pools, component, foreignComponent) {
 
     let foreignPool = findPoolWithComponent(pools, foreignComponent)
 
+    // If the foreign component isn't in any of the current pools (e.g. it's
+    // already part of an in-flight request), skip colocating...
+    if (! foreignPool) return
+
     let foreignCommit = foreignPool.findCommitByComponent(foreignComponent)
 
     // Delete needs to come before add in case there are the same pool...
@@ -64,6 +68,8 @@ function findPoolWithComponent(pools, component) {
 
 function getDeepChildrenWithBindings(component, callback) {
     getDeepChildren(component, child => {
+        if (child.isLazy && ! child.hasBeenLazyLoaded) return
+
         if (hasReactiveProps(child) || hasWireModelableBindings(child)) {
             callback(child)
         }
